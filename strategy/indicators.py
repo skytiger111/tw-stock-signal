@@ -152,6 +152,20 @@ def calculate_bollinger_bands(
 # Main entry point
 # ─────────────────────────────────────────────
 
+
+# ATR (Average True Range)
+def calculate_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """
+    Calculate Average True Range (ATR) using Wilder's smoothing.
+    """
+    tr1 = high - low
+    tr2 = (high - close.shift(1)).abs()
+    tr3 = (low - close.shift(1)).abs()
+    true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = true_range.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    return atr
+
+
 def calculate_indicators(df: pd.DataFrame, ticker_type: str) -> pd.DataFrame:
     """
     Calculate all v2 indicators for the given OHLCV DataFrame.
@@ -199,6 +213,10 @@ def calculate_indicators(df: pd.DataFrame, ticker_type: str) -> pd.DataFrame:
     # Bollinger Bands(20)
     bb_upper, bb_middle, bb_lower, bb_bandwidth = calculate_bollinger_bands(close)
 
+
+    # ATR(14) — for volatility filter
+    atr = calculate_atr(high, low, close, period=14)
+
     # Assemble result
     result = df.copy()
     result["ma5"] = ma5
@@ -215,6 +233,7 @@ def calculate_indicators(df: pd.DataFrame, ticker_type: str) -> pd.DataFrame:
     result["bb_middle"] = bb_middle
     result["bb_lower"] = bb_lower
     result["bb_bandwidth"] = bb_bandwidth
+    result["atr"] = atr
 
     return result
 

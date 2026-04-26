@@ -307,6 +307,18 @@ def generate_signal(ticker: str, df: pd.DataFrame) -> dict[str, Any]:
             signal = "NEUTRAL"
             filters_passed = False
 
+
+    # ── 2890.TW ATR(14) volatility filter ──
+    # Skip entry when ATR < ATR(20MA) * 0.60 (low volatility = likely range-bound, skip)
+    if ticker == "2890.TW" and signal in ("LONG", "SHORT"):
+        df_check = df.tail(21)
+        if len(df_check) >= 21 and "atr" in df_check.columns:
+            atr_val = float(df_check["atr"].iloc[-1])
+            atr_ma = float(df_check["atr"].rolling(20).mean().iloc[-1])
+            if atr_val > 0 and atr_ma > 0 and atr_val < atr_ma * 0.40:
+                signal = "NEUTRAL"
+                filters_passed = False
+
     # ── Alerts (independent, do NOT override signal) ──
     alert: Optional[str] = None
     emoji = "➡️"
