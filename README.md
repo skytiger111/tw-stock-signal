@@ -1,21 +1,46 @@
 # tw-stock-signal
 
-台股技術面選股模組 - 均線動能策略 v1
+台股技術面選股模組 - 均線動能策略 v2
 
 ## 策略邏輯
 
-| 訊號 | 條件 | Emoji |
-| LONG（多頭）| MA5 > MA10 且 RSI(14) 在 40~70 | 📈 |
-| SHORT（空頭）| MA5 < MA10 且 RSI(14) 在 30~60 | 📉 |
-| NEUTRAL（中性）| 其他情況 | ➖ |
-| OVERBOUGHT（超買）| RSI(14) > 70 | ⚠️ |
-| OVERSOLD（超賣）| RSI(14) < 30 | ⚠️ |
+### 核心訊號（5 指標全部滿足才 LONG/SHORT）
+
+| 訊號 | 條件 | 備註 |
+|------|------|------|
+| **LONG** | MA5>MA10 且 RSI14>50 且 K>D 且 MACD>0 且 MACD>Signal 且 BB口擴張 | 5/5 全多頭 |
+| **SHORT** | MA5<MA10 且 RSI14<50 且 K<D 且 MACD<0 且 MACD<Signal 且 BB口收縮 | 5/5 全空頭 |
+| **NEUTRAL** | 核心未全數滿足，或被過濾器否決 | — |
+| **OVERBOUGHT** | RSI(14) > 70（警示，不推翻訊號）| ⚠️ |
+| **OVERSOLD** | RSI(14) < 30（警示，不推翻訊號）| ⚠️ |
+
+### ETF vs 個股參數分流
+
+| 類型 | 指標組合 | 均線設定 |
+|------|---------|---------|
+| **ETF**（0050/0052/00919/009816）| MA + RSI + MACD + 布林帶（4個）| MA(10/20) |
+| **個股**（2330/2890/2881/2317）| MA + RSI + KD + MACD + 布林帶（5個）| MA(5/10) |
+
+### 進場過濾器（加分制）
+- 3 核心指標（MA + RSI + KD）全滿足 → LONG
+- 但 MACD 空頭 或 布林帶空頭 → 降為 NEUTRAL
+
+### 停損 / 停利
+- **20%** 固定停損（最大可承受幅度）
+- 停利：無固定目標，抱到出現反向訊號
 
 ## 支援股票
 
-2330.TW（台積電）、2890.TW（永豐金）、00919.TW（群益高息）、
-2881.TW（富邦金）、0052.TW（富邦科技）、0050.TW（元大台灣50）、
-009816.TW（凱基TOP50）、2317.TW（鴻海）
+| 代碼 | 名稱 | 類型 |
+|------|------|------|
+| 2330.TW | 台積電 | 個股 |
+| 2890.TW | 永豐金控 | 個股 |
+| 2881.TW | 富邦金控 | 個股 |
+| 2317.TW | 鴻海精密 | 個股 |
+| 0050.TW | 元大台灣50 | ETF |
+| 0052.TW | 富邦科技 | ETF |
+| 00919.TW | 群益高息 | ETF（均值回歸 special）|
+| 009816.TW | 凱基TOP50 | ETF |
 
 ## 安裝
 
@@ -23,20 +48,33 @@ pip install -r requirements.txt
 
 ## 執行
 
-python strategy_ma_momentum.py
+python main.py          # 即時訊號
+python run.py           # 每日排程
 
 ## 測試
 
-pytest test_strategy.py -v
+pytest tests/ -v        # 全部測試
 
 ## 版本演化
 
 | 版本 | 狀態 | 說明 |
+|------|------|------|
 | v0.1 | ✅ | MVP，單元測試通過 |
-| v0.2 | ⏳ | 歷史回測（2020-2025）|
-| v0.3 | ⏳ | 自動化排程 + Telegram通知 |
-| v1.0 | 🎯 | Docker部署 + 影子交易驗證 |
+| v1.0 | ✅ | 均線動能策略 v1（MA5/MA10/RSI）|
+| v2.0 | 🎯 | 均線動能策略 v2（+KD/MACD/布林帶，ETF/個股分流）|
+
+## 回測驗收標準
+
+| 指標 | 標準 |
+|------|------|
+| Profit Factor（PF）| > 1.25 |
+| Max Drawdown（MaxDD）| < 20% |
+| Win Rate | > 45% |
 
 ## 數據來源
 
-Yahoo Finance（透過 yfinance）
+Yahoo Finance（yfinance）
+
+## GitHub
+
+https://github.com/skytiger111/tw-stock-signal
