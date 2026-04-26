@@ -1,0 +1,354 @@
+{
+  "meta": {
+    "strategy_version": "v2.0",
+    "document_date": "2026-04-26",
+    "total_stories": 24,
+    "categories": {
+      "indicator_calculation": 6,
+      "signal_generation": 5,
+      "etf_stock_split": 3,
+      "risk_management": 4,
+      "overnight_logic": 2,
+      "scheduling": 2,
+      "json_output": 2
+    },
+    "priority_distribution": {
+      "must": 12,
+      "should": 8,
+      "could": 4
+    }
+  },
+  "stories": [
+    {
+      "story_id": "story-001",
+      "title": "計算個股 MA 均線（MA5 > MA10）",
+      "叙述": "身為系統，想要計算個股（2330/2890/2881/2317）的 MA5 與 MA10，以便判斷多頭/空頭趨勢",
+      "验收标准": [
+        "✅ 輸入股票代碼（2330.TW），輸出 MA5 數值（過去5日收盤價平均）",
+        "✅ 輸入股票代碼（2330.TW），輸出 MA10 數值（過去10日收盤價平均）",
+        "✅ MA5 > MA10 時，回傳多頭條件滿足標記",
+        "✅ MA5 < MA10 時，回傳空頭條件滿足標記",
+        "✅ 至少需要 10+ 筆歷史數據才能計算"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-002",
+      "title": "計算 ETF MA 均線（MA10 > MA20）",
+      "叙述": "身為系統，想要計算 ETF（0050/0052/00919/009816）的 MA10 與 MA20，以便與個股分流處理",
+      "验收标准": [
+        "✅ 輸入 ETF 代碼（0050.TW），輸出 MA10 數值（過去10日收盤價平均）",
+        "✅ 輸入 ETF 代碼（0050.TW），輸出 MA20 數值（過去20日收盤價平均）",
+        "✅ MA10 > MA20 時，回傳多頭條件滿足標記",
+        "✅ MA10 < MA20 時，回傳空頭條件滿足標記",
+        "✅ 至少需要 20+ 筆歷史數據才能計算"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-003",
+      "title": "計算 RSI（14日相對強弱指標）",
+      "叙述": "身為系統，想要計算 RSI（14日），以便輔助判斷多頭/空頭強度",
+      "验收标准": [
+        "✅ 輸入股票代碼，輸出 RSI14 數值（範圍 0-100）",
+        "✅ RSI > 50 時，回傳多頭條件滿足標記",
+        "✅ RSI < 50 時，回傳空頭條件滿足標記",
+        "✅ RSI > 70 時，附加 OVERBOUGHT 警示（不改寫訊號）",
+        "✅ RSI < 30 時，附加 OVERSOLD 警示（不改寫訊號）",
+        "✅ 至少需要 14+ 筆歷史數據才能計算"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-004",
+      "title": "計算 KD 指標（僅個股）",
+      "叙述": "身為系統，想要計算 KD 指標（僅個股），以便偵測低檔/高檔反轉訊號",
+      "验收标准": [
+        "✅ 輸入個股代碼（2330.TW），輸出 K 值與 D 值（範圍 0-100）",
+        "✅ K > D 且 K < 30（低檔）時，回傳多頭KD條件滿足",
+        "✅ K < D 且 K > 70（高檔）時，回傳空頭KD條件滿足",
+        "✅ ETF（0050.TW）不計算 KD，直接跳過",
+        "✅ 至少需要 9+ 筆歷史數據才能計算 RSV"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-005",
+      "title": "計算 MACD 指標（過濾器）",
+      "叙述": "身為系統，想要計算 MACD（DIF / Signal / Histogram），以便過濾假突破",
+      "验收标准": [
+        "✅ 輸出 DIF 線數值",
+        "✅ 輸出 Signal 線數值（EMA of DIF）",
+        "✅ 輸出 Histogram（DIF - Signal）",
+        "✅ DIF > 0 且 MACD > Signal → 多頭 MACD 條件",
+        "✅ DIF < 0 且 MACD < Signal → 空頭 MACD 條件",
+        "✅ 至少需要 30+ 筆歷史數據確保收斂"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-006",
+      "title": "計算布林帶指標（過濾器）",
+      "叙述": "身為系統，想要計算布林帶（上軌/中軌/下軌/帶寬），以便偵測波動性突破",
+      "验收标准": [
+        "✅ 輸出上軌（MA20 + 2*標準差）",
+        "✅ 輸出中軌（MA20）",
+        "✅ 輸出下軌（MA20 - 2*標準差）",
+        "✅ 輸出 Bandwidth（（上軌-下軌）/ 中軌 * 100）",
+        "✅ Bandwidth 擴張 且 突破上軌 → 多頭布林帶條件",
+        "✅ Bandwidth 擴張 且 跌破下軌 → 空頭布林帶條件",
+        "✅ 至少需要 20+ 筆歷史數據"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-007",
+      "title": "ETF LONG 訊號邏輯（4 指標全滿足）",
+      "叙述": "身為系統，想要在 ETF 的 MA + RSI + MACD + 布林帶 全部滿足多頭時產生 LONG 訊號",
+      "验收标准": [
+        "✅ MA10 > MA20 必須滿足",
+        "✅ RSI > 50 必須滿足",
+        "✅ MACD 滿足多頭條件（DIF > 0 且 MACD > Signal）",
+        "✅ 布林帶滿足多頭條件（Bandwidth擴張 且 突破上軌）",
+        "✅ 四項全部滿足 → 輸出 signal='LONG'",
+        "✅ 任一項不滿足 → 不輸出 LONG"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-008",
+      "title": "個股 LONG 訊號邏輯（5 指標全滿足）",
+      "叙述": "身為系統，想要在個股的 MA + RSI + KD 全部滿足多頭 且 過濾器不通過空頭時產生 LONG",
+      "验收标准": [
+        "✅ MA5 > MA10 必須滿足",
+        "✅ RSI > 50 必須滿足",
+        "✅ KD：K > D 且 K 在低檔反轉 必須滿足",
+        "✅ MACD 不可滿足空頭條件（否決 LONG）",
+        "✅ 布林帶不可滿足空頭條件（否決 LONG）",
+        "✅ 五項核心指標全滿足 + 過濾器不通過空頭 → signal='LONG'"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-009",
+      "title": "ETF SHORT 訊號邏輯（4 指標全滿足）",
+      "叙述": "身為系統，想要在 ETF 的 MA + RSI + MACD + 布林帶 全部滿足空頭時產生 SHORT 訊號",
+      "验收标准": [
+        "✅ MA10 < MA20 必須滿足",
+        "✅ RSI < 50 必須滿足",
+        "✅ MACD 滿足空頭條件（DIF < 0 且 MACD < Signal）",
+        "✅ 布林帶滿足空頭條件（Bandwidth擴張 且 跌破下軌）",
+        "✅ 四項全部滿足 → 輸出 signal='SHORT'",
+        "✅ 任一項不滿足 → 不輸出 SHORT"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-010",
+      "title": "個股 SHORT 訊號邏輯（5 指標全滿足）",
+      "叙述": "身為系統，想要在個股的 MA + RSI + KD 全部滿足空頭 且 過濾器不通過多頭時產生 SHORT",
+      "验收标准": [
+        "✅ MA5 < MA10 必須滿足",
+        "✅ RSI < 50 必須滿足",
+        "✅ KD：K < D 且 K 在高檔反轉 必須滿足",
+        "✅ MACD 不可滿足多頭條件（否決 SHORT）",
+        "✅ 布林帶不可滿足多頭條件（否決 SHORT）",
+        "✅ 五項核心指標全滿足 + 過濾器不通過多頭 → signal='SHORT'"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-011",
+      "title": "過濾器否決邏輯（Filter Override）",
+      "叙述": "身為系統，想要在 MACD 或 布林帶 觸發反方向條件時否決 LONG/SHORT，改為 NEUTRAL",
+      "验收标准": [
+        "✅ MACD 觸發空頭條件 → LONG 被否決，輸出 NEUTRAL",
+        "✅ 布林帶觸發空頭條件 → LONG 被否決，輸出 NEUTRAL",
+        "✅ MACD 觸發多頭條件 → SHORT 被否決，輸出 NEUTRAL",
+        "✅ 布林帶觸發多頭條件 → SHORT 被否決，輸出 NEUTRAL",
+        "✅ filters_passed 欄位：通過時=true，被否決時=false",
+        "✅ OVERBOUGHT/OVERSOLD 警示不被過濾器覆寫"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-012",
+      "title": "警示機制（OVERBOUGHT / OVERSOLD）",
+      "叙述": "身為系統，想要在 RSI 超過 70 或 低於 30 時附加警示，且不改寫原有訊號",
+      "验收标准": [
+        "✅ RSI > 70 → alert='OVERBOUGHT'，emoji='⚠️'",
+        "✅ RSI < 30 → alert='OVERSOLD'，emoji='🔔'",
+        "✅ 警示不覆寫 LONG/SHORT/NEUTRAL 訊號",
+        "✅ 警示可與 LONG/SHORT 共存（同時輸出）"
+      ],
+      "负责人": "coder",
+      "優先順序": "should"
+    },
+    {
+      "story_id": "story-013",
+      "title": "ETF / 個股參數分流",
+      "叙述": "身為系統，想要根據股票類型自動套用不同參數（ETF: MA10>MA20，個股: MA5>MA10）",
+      "验收标准": [
+        "✅ 輸入 0050.TW → 自動套用 ETF 參數（MA10/MA20，無KD）",
+        "✅ 輸入 2330.TW → 自動套用個股參數（MA5/MA10，有KD）",
+        "✅ 支援列表內全部 8 檔（4 ETF + 4 個股）",
+        "✅ 未知類型輸入 → 回傳錯誤，不 crash"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-014",
+      "title": "支援股票清單對應",
+      "叙述": "身為系統，想要正確識別 8 檔支援股票的類型（ETF vs 個股）",
+      "验收标准": [
+        "✅ 2330.TW→個股, 2890.TW→個股, 2881.TW→個股, 2317.TW→個股",
+        "✅ 0050.TW→ETF, 0052.TW→ETF, 00919.TW→ETF, 009816.TW→ETF",
+        "✅ 識別錯誤時明確提示，不使用錯誤參數"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-015",
+      "title": "停損機制（20%）",
+      "叙述": "身為系統，想要計算進場後下跌 20% 的停損點位",
+      "验收标准": [
+        "✅ stop_loss_pct 固定為 20.0",
+        "✅ 停損以進場價為基準，非市價百分比",
+        "✅ 輸出 JSON 包含 stop_loss_pct 欄位",
+        "✅ 停損計算公式：進場價 × (1 - 0.20)"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-016",
+      "title": "停利機制（20%）",
+      "叙述": "身為系統，想要計算進場後上漲 20% 的停利點位",
+      "验收标准": [
+        "✅ take_profit_pct 固定為 20.0",
+        "✅ 停利以進場價為基準，非市價百分比",
+        "✅ 輸出 JSON 包含 take_profit_pct 欄位",
+        "✅ 停利計算公式：進場價 × (1 + 0.20)"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-017",
+      "title": "過夜持股邏輯",
+      "叙述": "身為系統，想要設定 holding_overnight=true，表示不留日內倉位",
+      "验收标准": [
+        "✅ holding_overnight 固定為 true",
+        "✅ 所有訊號輸出均攜帶此欄位",
+        "✅ 不允許日內當沖（此版本不支援）"
+      ],
+      "负责人": "coder",
+      "優先順序": "should"
+    },
+    {
+      "story_id": "story-018",
+      "title": "過夜持股標記與輸出",
+      "叙述": "身為系統，想要在訊號 JSON 中正確標示過夜持股設定",
+      "验收标准": [
+        "✅ 每筆輸出 JSON 均包含 holding_overnight: true",
+        "✅ 每筆輸出 JSON 均包含 stop_loss_pct: 20.0",
+        "✅ 每筆輸出 JSON 均包含 take_profit_pct: 20.0"
+      ],
+      "负责人": "coder",
+      "優先順序": "should"
+    },
+    {
+      "story_id": "story-019",
+      "title": "每日 14:30 自動產出訊號",
+      "叙述": "身為系統，想要在每日 14:30 自動執行策略，輸出全市場訊號",
+      "验收标准": [
+        "✅ 每日 14:30（台北時間）自動觸發",
+        "✅ 一次處理全部 8 檔股票",
+        "✅ 輸出結果存入 signals/ 目錄（格式：YYYY-MM-DD.json）",
+        "✅ 當日已執行則跳過（不重複執行）"
+      ],
+      "负责人": "coder",
+      "優先順序": "should"
+    },
+    {
+      "story_id": "story-020",
+      "title": "訊號即時查詢（任意時刻）",
+      "叙述": "身為使用者，想要在任意時刻手動查詢特定股票的當前訊號",
+      "验收标准": [
+        "✅ 輸入股票代碼，即時產出訊號（不等待 14:30）",
+        "✅ 使用最近收盤價計算",
+        "✅ 輸出格式與排程版本完全一致"
+      ],
+      "负责人": "coder",
+      "優先順序": "could"
+    },
+    {
+      "story_id": "story-021",
+      "title": "標準化 JSON 格式輸出",
+      "叙述": "身為系統，想要輸出符合規格的標準化 JSON，確保與 Dashboard v2 格式相容",
+      "验收标准": [
+        "✅ 輸出欄位齊全：timestamp, ticker, signal, price, indicators, filters_passed, stop_loss_pct, take_profit_pct, holding_overnight, alert, emoji",
+        "✅ indicators 內含：ma5/ma10/ma20, rsi14, k, d, macd_dif, macd_signal, macd_histogram, bb_upper, bb_middle, bb_lower, bb_bandwidth",
+        "✅ emoji 正確對應訊號：📈(LONG), 📉(SHORT), ➡️(NEUTRAL), ⚠️(OVERBOUGHT), 🔔(OVERSOLD)",
+        "✅ timestamp 格式為 ISO 8601",
+        "✅ 個股不使用的指標（ETF的KD）輸出 null 而非錯誤"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-022",
+      "title": "Yahoo Finance 數據獲取",
+      "叙述": "身為系統，想要從 Yahoo Finance 獲取台股日K線數據（至少 30 筆）",
+      "验收标准": [
+        "✅ 使用 yfinance 套件",
+        "✅ 自動附加 .TW 尾碼",
+        "✅ 每檔股票至少抓取 30 筆歷史數據",
+        "✅ 抓取失敗時提供明確錯誤訊息",
+        "✅ 頻率為日K線（daily OHLCV）"
+      ],
+      "负责人": "coder",
+      "優先順序": "must"
+    },
+    {
+      "story_id": "story-023",
+      "title": "獨立模組宣告（非 Dashboard v2）",
+      "叙述": "身為系統，想要確保本專案完全獨立，不依賴 Dashboard v2 任何函式",
+      "验收标准": [
+        "✅ strategy_ma_momentum.py 不 import Dashboard v2 模組",
+        "✅ 不使用 vault_master.json 等 Dashboard 設定檔",
+        "✅ 獨立 requirements.txt（僅 yfinance 等必要套件）",
+        "✅ 規格書第 9 節隔離宣告有效"
+      ],
+      "负责人": "analyst",
+      "優先順序": "should"
+    },
+    {
+      "story_id": "story-024",
+      "title": "策略回測驗證框架",
+      "叙述": "身為 Monitor，想要建立回測框架以驗證策略邏輯的正確性",
+      "验收标准": [
+        "✅ 輸入歷史數據，輸出訊號序列",
+        "✅ 驗證 LONG/SHORT/NEUTRAL 分類正確性",
+        "✅ 驗證過濾器否決邏輯正確性",
+        "✅ 驗證停損停利觸發條件",
+        "✅ 提供績效統計（勝率、報酬率）"
+      ],
+      "负责人": "monitor",
+      "優先順序": "could"
+    }
+  ]
+}
