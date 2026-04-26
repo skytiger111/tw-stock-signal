@@ -9,10 +9,10 @@ Signal logic (SPEC.md v2.0 Section 3):
 ETF vs STOCK vs HIGH_DIV_ETF:
   - STOCK:       MA5>MA10 + RSI>50 + K>D (low-turn) → LONG
   - ETF:         MA10>MA20 + RSI>50                → LONG
-  - HIGH_DIV_ETF (00919): Mean-reversion RSI + BB strategy
-    * LONG:  RSI(5) < 40 + price near/above lower BB + MACD hist turning up
-    * SHORT: RSI(5) > 60 + price near/below upper BB + MACD hist turning down
-    (No MA requirement — unsuitable for low-volatility dividend ETFs)
+  - HIGH_DIV_ETF (00919): RSI(14) momentum strategy
+    * LONG:  RSI(14) > 50 + MA10 > MA20 (trend confirmed)
+    * SHORT: RSI(14) < 50 + MA10 < MA20 (trend confirmed)
+    * BB bandwidth expanding = trend strength confirmation (not entry signal)
 
 Reference: SPEC.md v2.0 Sections 3, 4, 8.
 """
@@ -113,74 +113,62 @@ def _bb_bullish_filter(bb_upper: float, bb_middle: float, bb_lower: float,
 
 def _high_div_long(df: pd.DataFrame, curr_idx: int) -> bool:
     """
-    00919 mean-reversion LONG:
-    - RSI(5) < 40 (oversold)
-    - Price has bounced: current price >= lower BB (not too far below)
-    - BB bandwidth contracting or not expanding (consolidation)
-    - Optional: MACD histogram turning up from negative (prev hist < 0, curr hist >= 0)
+    00919 RSI(14) momentum LONG:
+    - RSI(14) > 50 (bullish momentum)
+    - MA10 > MA20 (uptrend confirmed)
+    - BB bandwidth expanding = trend strength (confirmation, not required)
     """
-    if curr_idx < 2:
+    if curr_idx < 1:
         return False
     curr = df.iloc[curr_idx]
     prev = df.iloc[curr_idx - 1]
 
-    rsi5 = float(curr["rsi5"]) if pd.notna(curr.get("rsi5")) else float(curr["rsi14"])
-    price = float(curr["Close"])
-    bb_lower = float(curr["bb_lower"])
+    rsi14 = float(curr["rsi14"])
+    ma10 = float(curr["ma10"])
+    ma20 = float(curr["ma20"])
     bb_bandwidth = float(curr["bb_bandwidth"])
     bb_bandwidth_prev = float(prev["bb_bandwidth"]) if pd.notna(prev.get("bb_bandwidth")) else bb_bandwidth
-    macd_histogram = float(curr["macd_histogram"])
-    macd_histogram_prev = float(prev["macd_histogram"]) if pd.notna(prev.get("macd_histogram")) else macd_histogram
 
-    # Core: RSI oversold
-    rsi_ok = rsi5 < 40
+    # Core: RSI momentum bullish
+    rsi_ok = rsi14 > 50
 
-    # Price near lower band (within 5% of lower band)
-    price_near_lower = price >= bb_lower * 0.95
+    # Trend confirmed: MA10 > MA20
+    trend_ok = ma10 > ma20
 
-    # Not in expanding bandwidth (avoid breakout)
-    bb_calm = bb_bandwidth <= bb_bandwidth_prev * 1.05
+    # BB expanding = trend strength confirmation (optional)
+    bb_strong = bb_bandwidth > bb_bandwidth_prev
 
-    # MACD histogram turning up
-    macd_turning_up = macd_histogram >= 0 and macd_histogram_prev < 0
-
-    return rsi_ok and price_near_lower and (bb_calm or macd_turning_up)
+    return rsi_ok and trend_ok
 
 
 def _high_div_short(df: pd.DataFrame, curr_idx: int) -> bool:
     """
-    00919 mean-reversion SHORT:
-    - RSI(5) > 60 (overbought)
-    - Price near upper BB (bouncing from overbought)
-    - BB not expanding
-    - MACD histogram turning down from positive
+    00919 RSI(14) momentum SHORT:
+    - RSI(14) < 50 (bearish momentum)
+    - MA10 < MA20 (downtrend confirmed)
+    - BB bandwidth expanding = trend strength (confirmation, not required)
     """
-    if curr_idx < 2:
+    if curr_idx < 1:
         return False
     curr = df.iloc[curr_idx]
     prev = df.iloc[curr_idx - 1]
 
-    rsi5 = float(curr["rsi5"]) if pd.notna(curr.get("rsi5")) else float(curr["rsi14"])
-    price = float(curr["Close"])
-    bb_upper = float(curr["bb_upper"])
+    rsi14 = float(curr["rsi14"])
+    ma10 = float(curr["ma10"])
+    ma20 = float(curr["ma20"])
     bb_bandwidth = float(curr["bb_bandwidth"])
     bb_bandwidth_prev = float(prev["bb_bandwidth"]) if pd.notna(prev.get("bb_bandwidth")) else bb_bandwidth
-    macd_histogram = float(curr["macd_histogram"])
-    macd_histogram_prev = float(prev["macd_histogram"]) if pd.notna(prev.get("macd_histogram")) else macd_histogram
 
-    # Core: RSI overbought
-    rsi_ok = rsi5 > 60
+    # Core: RSI momentum bearish
+    rsi_ok = rsi14 < 50
 
-    # Price near upper band (within 5% of upper band)
-    price_near_upper = price <= bb_upper * 1.05
+    # Trend confirmed: MA10 < MA20
+    trend_ok = ma10 < ma20
 
-    # Not in expanding bandwidth
-    bb_calm = bb_bandwidth <= bb_bandwidth_prev * 1.05
+    # BB expanding = trend strength confirmation (optional)
+    bb_strong = bb_bandwidth > bb_bandwidth_prev
 
-    # MACD histogram turning down
-    macd_turning_down = macd_histogram <= 0 and macd_histogram_prev > 0
-
-    return rsi_ok and price_near_upper and (bb_calm or macd_turning_down)
+    return rsi_ok and trend_ok
 
 
 # ─────────────────────────────────────────────

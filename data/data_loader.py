@@ -38,7 +38,7 @@ def load_ohlcv(ticker: str, days: int = 60) -> pd.DataFrame:
     # Use period='id't'd' and explicitly calculate date range instead
     df = yf.download(
         ticker,
-        period="2y",          # fetch 2 years, enough for any lookback
+        period="5y",          # fetch 2 years, enough for any lookback
         auto_adjust=True,
         progress=False,
         timeout=30,

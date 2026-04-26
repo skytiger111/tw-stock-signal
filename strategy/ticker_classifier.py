@@ -14,9 +14,9 @@ SUPPORTED_TICKERS: dict[str, str] = {
     # Standard ETFs (use MA10/MA20, no KD)
     "0050.TW": "ETF",
     "0052.TW": "ETF",
-    # High-dividend low-volatility ETF (use RSI momentum only, no MA)
-    "00919.TW": "HIGH_DIV_ETF",
     "009816.TW": "ETF",
+    "00919.TW": "ETF",  # was HIGH_DIV_ETF, changed 2026-04-26
+    # 00919: standard ETF (RSI momentum, 20% SL) — was HIGH_DIV_ETF, changed 2026-04-26
 }
 
 TickerType = str  # "STOCK" | "ETF" | "HIGH_DIV_ETF"
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     for t, expected in [
         ("2330.TW", "STOCK"),
         ("0050.TW", "ETF"),
-        ("00919.TW", "HIGH_DIV_ETF"),
+        ("00919.TW", "ETF"),  # was HIGH_DIV_ETF, changed to standard ETF
         ("2881.TW", "STOCK"),
         ("0052.TW", "ETF"),
     ]:
