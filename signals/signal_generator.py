@@ -170,8 +170,8 @@ def generate_signal(ticker: str, df: pd.DataFrame) -> dict[str, Any]:
 
     # ── Determine MA pair based on ticker type ──
     if ticker_type == "ETF":
-        ma_long: float = ma10
-        ma_short: float = ma20
+        ma_short: float = ma10
+        ma_long: float = ma20
     else:  # STOCK
         ma_short = ma5
         ma_long = ma10
