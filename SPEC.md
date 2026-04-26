@@ -1,79 +1,112 @@
-# 均線動能策略 v1（MA Momentum Strategy v1）策略規格書
+# 均線動能策略 v2（MA Momentum Strategy v2）策略規格書
 
 ## 1. 策略名稱與版本
 
 - **策略名稱：** 均線動能策略（MA Momentum Strategy）
-- **版本：** v1.0
+- **版本：** v2.0
 - **建立日期：** 2026-04-26
+- **基於版本：** v1.0（2026-04-26）
 - **狀態：** 已確認，待 Coder 實作
 
 ---
 
-## 2. 策略邏輯
+## 2. 與 v1 的差異摘要
 
-### 2.1 技術指標
-
-| 指標 | 類型 | 計算方式 | 用途 |
-|------|------|----------|------|
-| MA5  | 移動平均線 | SMA（簡單移動平均） | 短期趨勢捕捉 |
-| MA10 | 移動平均線 | SMA（簡單移動平均） | 中期趨勢確認 |
-| RSI(14) | 動量指標 | Wilder's RSI | 超買/超賣判斷 |
-
-### 2.2 訊號判斷邏輯
-
-```
-信号判断规则：
-
-LONG（多頭）：
-  - MA5 > MA10（均線多頭排列）
-  - RSI(14) 在 40~70 區間（偏多但未超買）
-
-NEUTRAL（中性）：
-  - MA5 與 MA10 交叉纠缠（差距 < 1%）
-  - RSI(14) 在 30~70 區間
-
-SHORT（空頭）：
-  - MA5 < MA10（均線空頭排列）
-  - RSI(14) 在 30~60 區間（偏空但未超賣）
-
-OVERBOUGHT（超買）：
-  - RSI(14) > 70
-
-OVERSOLD（超賣）：
-  - RSI(14) < 30
-```
-
-### 2.3 進場/出場條件
-
-**進場 LONG：**
-- MA5 上穿 MA10（金叉）
-- RSI(14) 由 30 以下回升至 40 以上
-
-**進場 SHORT：**
-- MA5 下穿 MA10（死叉）
-- RSI(14) 由 70 以上回落至 60 以下
-
-**出場條件：**
-- MA5 與 MA10 形成死叉 → 多頭止損
-- MA5 與 MA10 形成金叉 → 空頭止損
-- RSI(14) 觸及 80（多頭止盈）或 20（空頭止盈）
+| 項目 | v1 | v2 |
+|------|----|----|
+| MA 週期 | 固定 MA5 + MA10 | ETF：MA10 > MA20／個股：MA5 > MA10 |
+| 指標數量 | 3 個（MA5, MA10, RSI） | ETF：4 個／個股：5 個 |
+| 新增指標 | — | MACD（過濾器）、布林帶（過濾器）、KD（僅個股） |
+| 訊號邏輯 | 獨立判斷 | 核心指標（MA+RSI+KD）全滿足 + 過濾器（MACD+布林帶）否決 |
+| 停損/停利 | RSI 20/80 主觀判斷 | 固定 20% |
+| 持股方式 | 未定義 | 過夜 |
+| 角色定位 | 未定義 | 輔助工具 |
 
 ---
 
-## 3. 數據規格
+## 3. 訊號邏輯（Signal Logic）
+
+### 3.1 訊號類型
+
+| 訊號 | 定義 |
+|------|------|
+| **LONG** | 核心指標（MA + RSI + KD）全部滿足多頭條件，且過濾器（MACD + 布林帶）**不通過**空頭條件 |
+| **SHORT** | 核心指標（MA + RSI + KD）全部滿足空頭條件，且過濾器（MACD + 布林帶）**不通過**多頭條件 |
+| **NEUTRAL** | 核心指標未全數滿足，或被過濾器否決 |
+| **OVERBOUGHT** | RSI > 70（警示，不推翻訊號） |
+| **OVERSOLD** | RSI < 30（警示，不推翻訊號） |
+
+### 3.2 指標多頭/空頭條件
+
+| 指標 | 多頭（LONG） | 空頭（SHORT） |
+|------|-------------|--------------|
+| **MA** | MA5 > MA10（個股）<br>MA10 > MA20（ETF） | MA5 < MA10（個股）<br>MA10 < MA20（ETF） |
+| **RSI** | RSI > 50 | RSI < 50 |
+| **KD** | K > D 且 K 在低檔反轉（個股專用）<br>ETF 不使用 KD | K < D 且 K 在高檔反轉（個股專用）<br>ETF 不使用 KD |
+| **MACD**（過濾器） | DIF > 0 且 MACD > Signal | DIF < 0 且 MACD < Signal |
+| **布林帶**（過濾器） | Bandwidth 擴張 且 突破上軌 | Bandwidth 擴張 且 跌破下軌 |
+
+### 3.3 過濾器邏輯
+
+- **LONG 的過濾：** 若 MACD 滿足空頭條件（見上表）或 布林帶滿足空頭條件，則 LONG 被否決，改為 NEUTRAL。
+- **SHORT 的過濾：** 若 MACD 滿足多頭條件或 布林帶滿足多頭條件，則 SHORT 被否決，改為 NEUTRAL。
+- 過濾器**不改寫** OVERBOUGHT / OVERSOLD 警示。
+
+---
+
+## 4. ETF vs 個股參數分工
+
+| 參數 | ETF（0050 / 0052 / 00919 / 009816） | 個股（2330 / 2890 / 2881 / 2317） |
+|------|-------------------------------------|-----------------------------------|
+| MA | MA10 > MA20 | MA5 > MA10 |
+| RSI | ✅ RSI > 50（LONG）／ RSI < 50（SHORT） | ✅ RSI > 50（LONG）／ RSI < 50（SHORT） |
+| KD | ❌ 不使用 | ✅ K > D 且 K 在低檔反轉（LONG）<br>✅ K < D 且 K 在高檔反轉（SHORT） |
+| MACD | ✅ 使用（過濾器） | ✅ 使用（過濾器） |
+| 布林帶 | ✅ 使用（過濾器） | ✅ 使用（過濾器） |
+| **核心指標數量** | **4 個**（MA + RSI + MACD + 布林帶） | **5 個**（MA + RSI + KD + MACD + 布林帶） |
+
+> **ETF 判斷 LONG/SHORT：** MA + RSI + MACD + 布林帶，四個指標需全部滿足方向一致性，KD 不參與計算。
+
+---
+
+## 5. 風控參數
+
+| 參數 | 數值 |
+|------|------|
+| 停損（Stop Loss） | 進場後下跌 20% |
+| 停利（Take Profit） | 進場後上漲 20% |
+| 持股方式 | 過夜（不留日內倉位） |
+| 角色定位 | 輔助工具（不作主要決策依據） |
+
+---
+
+## 6. 支援股票
+
+| 代碼 | 名稱 | 類型 |
+|------|------|------|
+| 2330.TW | 台積電 | 個股 |
+| 2890.TW | 永豐金 | 個股 |
+| 2881.TW | 富邦金 | 個股 |
+| 2317.TW | 鴻海 | 個股 |
+| 0050.TW | 元大台灣50 | ETF |
+| 0052.TW | 富邦科技 | ETF |
+| 00919.TW | 群益台灣精選高息 | ETF |
+| 009816.TW | 台新永續化趨勢 | ETF |
+
+---
+
+## 7. 數據規格
 
 | 項目 | 規格 |
 |------|------|
 | 數據來源 | Yahoo Finance（`yfinance`） |
 | 頻率 | 日K線（Daily OHLCV） |
-| 回測區間 | 2020-01-01 ～ 2025-12-31 |
-| 前溯期（lookback） | 3 個月（約 65 個交易日） |
-| 目標市場 | 台股（.TW 尾碼）|
-| 預設標的 | 2330.TW（台積電）|
+| 指標前溯期 | 至少 30 個交易日（確保 MACD / KD 收斂） |
+| 目標市場 | 台股（.TW 尾碼） |
 
 ---
 
-## 4. 訊號格式（標準化 JSON）
+## 8. 訊號格式（標準化 JSON）
 
 ```json
 {
@@ -81,9 +114,25 @@ OVERSOLD（超賣）：
   "ticker": "2330.TW",
   "signal": "LONG",
   "price": 850.0,
-  "ma5": 840.0,
-  "ma10": 835.0,
-  "rsi14": 65.5,
+  "indicators": {
+    "ma5": 840.0,
+    "ma10": 835.0,
+    "ma20": 820.0,
+    "rsi14": 65.5,
+    "k": 72.3,
+    "d": 68.1,
+    "macd_dif": 5.2,
+    "macd_signal": 3.1,
+    "macd_histogram": 2.1,
+    "bb_upper": 870.0,
+    "bb_middle": 845.0,
+    "bb_lower": 820.0,
+    "bb_bandwidth": 50.0
+  },
+  "filters_passed": true,
+  "stop_loss_pct": 20.0,
+  "take_profit_pct": 20.0,
+  "holding_overnight": true,
   "alert": null,
   "emoji": "📈"
 }
@@ -94,80 +143,56 @@ OVERSOLD（超賣）：
 | 欄位 | 類型 | 說明 |
 |------|------|------|
 | `timestamp` | ISO 8601 字串 | 訊號產生時間 |
-| `ticker` | 字串 | 股票代碼（Yahoo格式） |
+| `ticker` | 字串 | 股票代碼（Yahoo 格式） |
 | `signal` | 列舉值 | LONG / NEUTRAL / SHORT / OVERBOUGHT / OVERSOLD |
 | `price` | 浮點數 | 當日收盤價 |
-| `ma5` | 浮點數 | 5日均線值 |
-| `ma10` | 浮點數 | 10日均線值 |
-| `rsi14` | 浮點數 | 14日RSI值 |
-| `alert` | 字串或 null | 警示訊息（無則為 null） |
+| `indicators` | 物件 | 完整指標數值（MA / RSI / KD / MACD / 布林帶） |
+| `filters_passed` | 布林 | 過濾器是否通過（LONG/SHORT 時必為 true） |
+| `stop_loss_pct` | 浮點數 | 停損百分比（固定 20） |
+| `take_profit_pct` | 浮點數 | 停利百分比（固定 20） |
+| `holding_overnight` | 布林 | 是否過夜（固定 true） |
+| `alert` | 字串或 null | OVERBOUGHT / OVERSOLD 警示（無則為 null） |
 | `emoji` | 字串 | 📈 / 📉 / ➡️ / ⚠️ / 🔔 |
 
 ---
 
-## 5. 四階段驗收標準
+## 9. 與 Dashboard v2 的差異說明
 
-### 第一階段｜單元測試（Unit Test）
-- [x] Mypy 型別檢查通過（`mypy --strict`）
-- [x] 數值計算誤差 < 0.0001%（相對於 pandas 基準）
-- [x] RSI 初始值計算正確（的前 14 筆資料 RSI 為 null）
-
-### 第二階段｜回測驗收（Backtest Validation）
-- [x] Profit Factor（盈利率）> 1.25
-- [x] Max Drawdown（最大回落）< 20%
-- [x] Win Rate（勝率）> 45%
-
-### 第三階段｜樣本外測試（Out-of-Sample Test）
-- [x] 測試集績效 >= 訓練集績效 × 50%
-- [x] 訓練區間：2020-01-01 ～ 2023-12-31
-- [x] 測試區間：2024-01-01 ～ 2025-12-31
-
-### 第四階段｜壓力測試（Stress Test）
-- [x] 48 小時連續運行無崩潰
-- [x] 記憶體無洩漏（RSS 成長 < 50MB/24h）
-- [x] API 限速優雅處理（HTTP 429 → 指數退避）
-
----
-
-## 6. 與 Dashboard v2 的差異說明
-
-| 項目 | 均線動能策略 v1 | Dashboard v2 |
+| 項目 | 均線動能策略 v2 | Dashboard v2 |
 |------|----------------|--------------|
-| 專案性質 | **全新獨立專案** | 現有對帳單系統 |
+| 專案性質 | **獨立專案** | 現有對帳單系統 |
 | 目標功能 | 技術分析訊號產生 | 持股對帳與績效報告 |
-| 數據來源 | Yahoo Finance 直接拉取 | FinMind API + Yahoo Finance |
-| 核心模組 | `strategy/`, `signals/` | `output/`, `integrate.py` |
-| 輸出形式 | JSON 訊號 + 視覺化圖表 | PDF 報告 + HTML Dashboard |
+| 數據來源 | Yahoo Finance | FinMind API + Yahoo Finance |
+| 核心模組 | `strategy_ma_momentum.py` | `output/`, `integrate.py` |
+| 輸出形式 | JSON 訊號 | PDF 報告 + HTML Dashboard |
 | 相依性 | **不依賴** Dashboard v2 任何函數 | — |
-| 技術棧 | Python + pandas + yfinance | Python + FinMind + SendGrid |
 
-**重要宣告：本專案為完全獨立專案，不使用 Dashboard v2 之任何函式、資料或設定。**
+**重要宣告：本專案（均線動能策略 v2）為完全獨立專案，不使用 Dashboard v2 之任何函式、資料或設定。**
 
 ---
 
-## 7. 專案結構（預定）
+## 10. 專案結構
 
 ```
 ~/code/tw-stock-signal/
-├── SPEC.md                  ← 本規格書
-├── requirements.txt         ← 依賴套件
-├── strategy/
-│   ├── __init__.py
-│   ├── ma_momentum.py       ← 核心策略邏輯
-│   └── indicators.py        ← 技術指標計算（MA/RSI）
-├── signals/
-│   ├── __init__.py
-│   └── signal_generator.py  ← 訊號產生器
-├── backtest/
-│   ├── __init__.py
-│   └── backtester.py        ← 回測引擎
-├── tests/
-│   ├── test_indicators.py   ← 指標單元測試
-│   ├── test_signals.py      ← 訊號單元測試
-│   └── test_backtest.py     ← 回測整合測試
-└── run.py                   ← 執行入口
+├── SPEC.md                      ← 本規格書（v2）
+├── README.md
+├── requirements.txt
+├── strategy_ma_momentum.py      ← 核心策略實作（v2）
+├── test_strategy.py             ← 測試
+└── signals/                     ← 訊號輸出（JSON）
 ```
 
 ---
 
-*文件版本：v1.0 | 建立者：Analyst Agent | 日期：2026-04-26*
+## 11. v2 實作約束
+
+1. **不做未討論的假設：** 所有參數、邏輯皆來自本規格書，不自行發明。
+2. **ETF / 個股分流：** 進策略前先判斷類型，套用對應參數表（見第 4 節）。
+3. **過濾器順序：** 先算核心指標 → 斷言方向 → 再跑過濾器 否決。
+4. **警示不覆寫：** OVERBOUGHT / OVERSOLD 為獨立警示，不因過濾器或核心指標而消失。
+5. **停損停利：** 以**進場價**為基準計算 20%，非市價百分比。
+
+---
+
+*文件版本：v2.0 | 建立者：Analyst Agent | 日期：2026-04-26*
