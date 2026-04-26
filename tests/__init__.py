@@ -1,1 +1,3 @@
-"""Test suite for tw-stock-signal v2."""
+"""
+tw-stock-signal test suite.
+"""

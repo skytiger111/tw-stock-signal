@@ -10,7 +10,7 @@ Supports train/test split for out-of-sample testing:
   - Training: 2020-01-01 to 2023-12-31
   - Testing:  2024-01-01 to 2025-12-31
 
-Reference: SPEC.md v2.0 — validation criteria (Sections 2, 3, 5).
+Reference: SPEC.md v2.0 — validation criteria.
 """
 
 from __future__ import annotations
@@ -21,13 +21,20 @@ from typing import Optional
 import pandas as pd
 
 from data.data_loader import load_ohlcv
-from portfolio.position_manager import Position, StopLossError, TakeProfitError
+from portfolio.position_manager import (
+    Position,
+    StopLossError,
+    TakeProfitError,
+    should_exit,
+    get_stop_loss,
+    get_take_profit,
+)
 from signals.signal_generator import generate_signal
 from strategy.indicators import calculate_indicators
 from strategy.ticker_classifier import classify_ticker
 
 # ─────────────────────────────────────────────
-# Result types
+# Result type
 # ─────────────────────────────────────────────
 
 @dataclass
@@ -74,7 +81,7 @@ def run_backtest(
         print(f"[backtest] Loading {ticker} from {start_date} to {end_date}...")
 
     # ── 1. Load & prepare data ──
-    df_raw = load_ohlcv(ticker, days=500)  # generous lookback
+    df_raw = load_ohlcv(ticker, days=500)
     df_raw.index = pd.to_datetime(df_raw.index)
     df_raw = df_raw[df_raw.index >= start_date]
     df_raw = df_raw[df_raw.index <= end_date]
@@ -85,7 +92,7 @@ def run_backtest(
     ticker_type = classify_ticker(ticker)
     df = calculate_indicators(df_raw, ticker_type)
 
-    # ── 2. Simulate trading ──
+    # ── 2. Simulate trading bar-by-bar ──
     capital = initial_capital
     position: Optional[Position] = None
     equity_curve: list[float] = []
@@ -93,9 +100,9 @@ def run_backtest(
     trade_pnls: list[float] = []
 
     for i in range(1, len(df)):
-        bar = df.iloc[i]
-        signal = generate_signal(ticker, df.iloc[: i + 1])  # use all bars up to now
-        price = float(bar["Close"])
+        # Generate signal using all bars up to current index
+        signal = generate_signal(ticker, df.iloc[: i + 1])
+        price = float(df.iloc[i]["Close"])
         date = df.index[i].strftime("%Y-%m-%d")
 
         # ── Entry logic ──
@@ -113,38 +120,37 @@ def run_backtest(
         # ── Exit logic ──
         else:
             try:
-                if signal["position_type"] == position.position_type:
-                    # use position_manager to check exit
-                    from portfolio.position_manager import should_exit
-                    if should_exit(signal, position.entry_price, position.position_type):
-                        # Close trade
-                        if position.position_type == "LONG":
-                            pnl_pct = (price - position.entry_price) / position.entry_price * 100
-                        else:
-                            pnl_pct = (position.entry_price - price) / position.entry_price * 100
+                # Check if position should exit
+                if should_exit(signal, position.entry_price, position.position_type):
+                    # Calculate PnL
+                    if position.position_type == "LONG":
+                        pnl_pct = (price - position.entry_price) / position.entry_price * 100
+                    else:  # SHORT
+                        pnl_pct = (position.entry_price - price) / position.entry_price * 100
 
-                        pnl_twd = capital * pnl_pct / 100
-                        capital += pnl_twd
-                        trade_pnls.append(pnl_twd)
-                        trades.append({
-                            "entry_date": position.entry_date,
-                            "exit_date": date,
-                            "type": position.position_type,
-                            "entry_price": position.entry_price,
-                            "exit_price": price,
-                            "pnl_pct": pnl_pct,
-                            "pnl_twd": pnl_twd,
-                        })
-                        if verbose:
-                            print(f"  [{date}] EXIT  {position.position_type} @ {price:.2f} | PnL: {pnl_pct:.2f}%")
-                        position = None
+                    pnl_twd = capital * pnl_pct / 100
+                    capital += pnl_twd
+                    trade_pnls.append(pnl_twd)
+                    trades.append({
+                        "entry_date": position.entry_date,
+                        "exit_date": date,
+                        "type": position.position_type,
+                        "entry_price": position.entry_price,
+                        "exit_price": price,
+                        "pnl_pct": round(pnl_pct, 4),
+                        "pnl_twd": round(pnl_twd, 2),
+                        "exit_reason": "SIGNAL_EXIT",
+                    })
+                    if verbose:
+                        print(f"  [{date}] EXIT  {position.position_type} @ {price:.2f} | PnL: {pnl_pct:.2f}%")
+                    position = None
 
             except StopLossError as e:
                 if verbose:
                     print(f"  [{date}] STOP LOSS — {e}")
-                # Apply stop loss
                 sl_price = price
-                pnl_pct = (sl_price - position.entry_price) / position.entry_price * 100 if position.position_type == "LONG" \
+                pnl_pct = (sl_price - position.entry_price) / position.entry_price * 100 \
+                    if position.position_type == "LONG" \
                     else (position.entry_price - sl_price) / position.entry_price * 100
                 pnl_twd = capital * pnl_pct / 100
                 capital += pnl_twd
@@ -155,8 +161,8 @@ def run_backtest(
                     "type": position.position_type,
                     "entry_price": position.entry_price,
                     "exit_price": sl_price,
-                    "pnl_pct": pnl_pct,
-                    "pnl_twd": pnl_twd,
+                    "pnl_pct": round(pnl_pct, 4),
+                    "pnl_twd": round(pnl_twd, 2),
                     "exit_reason": "STOP_LOSS",
                 })
                 position = None
@@ -165,7 +171,8 @@ def run_backtest(
                 if verbose:
                     print(f"  [{date}] TAKE PROFIT — {e}")
                 tp_price = price
-                pnl_pct = (tp_price - position.entry_price) / position.entry_price * 100 if position.position_type == "LONG" \
+                pnl_pct = (tp_price - position.entry_price) / position.entry_price * 100 \
+                    if position.position_type == "LONG" \
                     else (position.entry_price - tp_price) / position.entry_price * 100
                 pnl_twd = capital * pnl_pct / 100
                 capital += pnl_twd
@@ -176,8 +183,8 @@ def run_backtest(
                     "type": position.position_type,
                     "entry_price": position.entry_price,
                     "exit_price": tp_price,
-                    "pnl_pct": pnl_pct,
-                    "pnl_twd": pnl_twd,
+                    "pnl_pct": round(pnl_pct, 4),
+                    "pnl_twd": round(pnl_twd, 2),
                     "exit_reason": "TAKE_PROFIT",
                 })
                 position = None
@@ -235,7 +242,7 @@ def run_train_test_split(ticker: str, verbose: bool = True) -> dict:
       - Training: 2020-01-01 to 2023-12-31
       - Testing:  2024-01-01 to 2025-12-31
 
-    Returns dict with 'train' and 'test' BacktestResult objects.
+    Returns dict with 'train' and 'test' BacktestResult objects plus OOS check.
     """
     train = run_backtest(
         ticker=ticker,
@@ -250,20 +257,21 @@ def run_train_test_split(ticker: str, verbose: bool = True) -> dict:
         verbose=verbose,
     )
 
-    # Out-of-sample check (SPEC.md Section 3 — third stage validation):
-    # test performance >= train performance * 50%
+    # Out-of-sample check: test >= train × 50%
     train_return = train.total_return_pct
     test_return = test.total_return_pct
-    threshold = abs(train_return) * 0.5 if train_return != 0 else 0
 
-    oos_pass = (
-        (train_return >= 0 and test_return >= threshold) or
-        (train_return < 0 and test_return >= train_return * 0.5) or
-        (abs(train_return) < 0.01)  # near-zero baseline
-    )
+    if abs(train_return) < 0.01:
+        # Near-zero baseline — treat as pass if test is also near zero or positive
+        oos_pass = test_return >= -0.01
+        threshold = 0.0
+    else:
+        threshold = abs(train_return) * 0.5
+        oos_pass = test_return >= threshold
 
     if verbose:
-        print(f"\n[OOS Check] Train: {train_return:.2f}% | Test: {test_return:.2f}% | Threshold: {threshold:.2f}% | Pass: {oos_pass}")
+        print(f"\n[OOS Check] Train: {train_return:.2f}% | Test: {test_return:.2f}% "
+              f"| Threshold: {threshold:.2f}% | Pass: {oos_pass}")
 
     return {
         "train": train,

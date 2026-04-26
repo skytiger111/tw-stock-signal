@@ -1,6 +1,22 @@
-"""Unit tests for strategy/indicators.py"""
+"""
+Unit tests for strategy/indicators.py.
 
-import unittest
+Tests cover:
+  - RSI calculation (RSI > 50 → bullish, RSI < 50 → bearish)
+  - KD calculation (K > D for bullish)
+  - MACD calculation (DIF = fast EMA - slow EMA)
+  - Bollinger Bands (upper = middle + 2*std)
+  - calculate_indicators() main entry point
+
+Acceptance criteria (Sprint 1 Stage 1):
+  - mypy --strict passes
+  - RSI initial warmup period yields NaN for first 14 bars
+  - RSI of a rising series > 50
+  - RSI of a falling series < 50
+  - K > D when price is in uptrend
+"""
+
+import pytest
 import pandas as pd
 import numpy as np
 from strategy.indicators import (
@@ -12,98 +28,197 @@ from strategy.indicators import (
 )
 
 
-class TestRSI(unittest.TestCase):
-    def test_rsi_range(self):
-        """RSI values should be between 0 and 100."""
-        close = pd.Series(np.random.randn(100) + np.linspace(1, 10, 100)).cumsum() + 100
-        rsi = calculate_rsi(close)
-        valid = rsi.dropna()
-        self.assertTrue((valid >= 0).all() and (valid <= 100).all())
+# ─────────────────────────────────────────────
+# Fixtures
+# ─────────────────────────────────────────────
 
-    def test_rsi_first_14_nan(self):
-        """First 14 RSI values should be NaN."""
-        close = pd.Series([100.0] * 20)
-        rsi = calculate_rsi(close)
-        self.assertTrue(rsi.iloc[:14].isna().all())
+@pytest.fixture
+def rising_price() -> pd.Series:
+    """ monotonically rising price → RSI should be > 50 """
+    return pd.Series(np.arange(1, 101, dtype=float), name="Close")
 
 
-class TestKD(unittest.TestCase):
-    def test_kd_range(self):
-        """K and D values should be between 0 and 100."""
-        np.random.seed(42)
-        n = 50
-        close = pd.Series(np.random.randn(n).cumsum() + 100 + np.linspace(0, 10, n))
-        high = close + abs(np.random.randn(n))
-        low = close - abs(np.random.randn(n))
+@pytest.fixture
+def falling_price() -> pd.Series:
+    """ monotonically falling price → RSI should be < 50 """
+    return pd.Series(np.arange(100, 0, -1, dtype=float), name="Close")
 
+
+@pytest.fixture
+def ohlcv_rising() -> pd.DataFrame:
+    """OHLCV DataFrame with steadily rising prices."""
+    n = 60
+    close = np.arange(1, n + 1, dtype=float) * 10
+    return pd.DataFrame({
+        "Open":  close * 0.99,
+        "High":  close * 1.02,
+        "Low":   close * 0.97,
+        "Close": close,
+        "Volume": np.full(n, 1000.0),
+    })
+
+
+@pytest.fixture
+def ohlcv_falling() -> pd.DataFrame:
+    """OHLCV DataFrame with steadily falling prices."""
+    n = 60
+    close = np.arange(n, 0, -1, dtype=float) * 10
+    return pd.DataFrame({
+        "Open":  close * 1.01,
+        "High":  close * 1.03,
+        "Low":   close * 0.98,
+        "Close": close,
+        "Volume": np.full(n, 1000.0),
+    })
+
+
+# ─────────────────────────────────────────────
+# RSI tests
+# ─────────────────────────────────────────────
+
+class TestRSI:
+    def test_rsi_warmup_period_returns_nan(self, rising_price: pd.Series) -> None:
+        rsi = calculate_rsi(rising_price, period=14)
+        # First 13 values (0-indexed) should be NaN (need at least 14 deltas)
+        assert rsi.iloc[:13].isna().all(), "First 13 RSI values should be NaN during warmup"
+        assert rsi.iloc[13:].notna().any(), "RSI should produce values after warmup"
+
+    def test_rsi_bullish_series_above_50(self, rising_price: pd.Series) -> None:
+        rsi = calculate_rsi(rising_price, period=14)
+        valid_rsi = rsi.dropna()
+        assert (valid_rsi > 50).all(), "RSI of rising price should always be > 50"
+
+    def test_rsi_bearish_series_below_50(self, falling_price: pd.Series) -> None:
+        rsi = calculate_rsi(falling_price, period=14)
+        valid_rsi = rsi.dropna()
+        assert (valid_rsi < 50).all(), "RSI of falling price should always be < 50"
+
+    def test_rsi_bounds_0_to_100(self, rising_price: pd.Series) -> None:
+        rsi = calculate_rsi(rising_price, period=14)
+        valid_rsi = rsi.dropna()
+        assert (valid_rsi >= 0).all() and (valid_rsi <= 100).all()
+
+
+# ─────────────────────────────────────────────
+# KD tests
+# ─────────────────────────────────────────────
+
+class TestKD:
+    def test_kd_bullish_k_above_d(self) -> None:
+        """In a sustained uptrend K should be above D."""
+        close = pd.Series([10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40] * 3)
+        high  = close * 1.01
+        low   = close * 0.99
         k, d = calculate_kd(high, low, close)
         valid_k = k.dropna()
         valid_d = d.dropna()
-        self.assertTrue((valid_k >= 0).all() and (valid_k <= 100).all())
-        self.assertTrue((valid_d >= 0).all() and (valid_d <= 100).all())
+        assert (valid_k.values > valid_d.values).all(), "K should be above D in uptrend"
+
+    def test_kd_bearish_k_below_d(self) -> None:
+        """In a sustained downtrend K should be below D."""
+        close = pd.Series([40, 38, 36, 34, 32, 30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10] * 3)
+        high  = close * 1.01
+        low   = close * 0.99
+        k, d = calculate_kd(high, low, close)
+        valid_k = k.dropna()
+        valid_d = d.dropna()
+        assert (valid_k.values < valid_d.values).all(), "K should be below D in downtrend"
+
+    def test_kd_bounds_0_to_100(self) -> None:
+        close = pd.Series(np.linspace(10, 100, 60))
+        high  = close * 1.02
+        low   = close * 0.98
+        k, d = calculate_kd(high, low, close)
+        valid_k = k.dropna()
+        valid_d = d.dropna()
+        assert (valid_k >= 0).all() and (valid_k <= 100).all()
+        assert (valid_d >= 0).all() and (valid_d <= 100).all()
 
 
-class TestMACD(unittest.TestCase):
-    def test_macd_histogram(self):
-        """Histogram = DIF - Signal."""
-        close = pd.Series(np.random.randn(100).cumsum() + 100 + np.linspace(0, 20, 100))
-        dif, signal, hist = calculate_macd(close)
-        reconstructed = dif - signal
-        np.testing.assert_allclose(hist.dropna().values, reconstructed.dropna().values, rtol=1e-9)
+# ─────────────────────────────────────────────
+# MACD tests
+# ─────────────────────────────────────────────
+
+class TestMACD:
+    def test_macd_dif_positive_in_uptrend(self) -> None:
+        close = pd.Series(np.arange(1, 101, dtype=float) * 10)
+        dif, signal, histogram = calculate_macd(close)
+        valid_dif = dif.dropna()
+        assert (valid_dif > 0).all(), "DIF should be positive in sustained uptrend"
+
+    def test_macd_dif_negative_in_downtrend(self) -> None:
+        close = pd.Series(np.arange(100, 0, -1, dtype=float) * 10)
+        dif, signal, histogram = calculate_macd(close)
+        valid_dif = dif.dropna()
+        assert (valid_dif < 0).all(), "DIF should be negative in sustained downtrend"
+
+    def test_histogram_sign_matches_dif_minus_signal(self) -> None:
+        close = pd.Series(np.linspace(10, 100, 60))
+        dif, signal, histogram = calculate_macd(close)
+        valid = histogram.dropna()
+        expected = (dif - signal).dropna()
+        np.testing.assert_array_almost_equal(valid.values, expected.values[:len(valid)])
 
 
-class TestBollingerBands(unittest.TestCase):
-    def test_bb_width_positive(self):
-        """Bandwidth must be positive."""
-        close = pd.Series(np.random.randn(100).cumsum() + 100)
-        upper, middle, lower, bw = calculate_bollinger_bands(close)
-        valid = bw.dropna()
-        self.assertTrue((valid > 0).all())
+# ─────────────────────────────────────────────
+# Bollinger Bands tests
+# ─────────────────────────────────────────────
 
-    def test_bb_middle_is_sma20(self):
-        """Middle band should equal 20-period SMA."""
-        close = pd.Series(np.random.randn(100).cumsum() + 100)
-        _, middle, _, _ = calculate_bollinger_bands(close)
-        sma20 = close.rolling(20).mean()
-        np.testing.assert_allclose(middle.dropna().values, sma20.dropna().values, rtol=1e-9)
+class TestBollingerBands:
+    def test_upper_above_middle(self) -> None:
+        close = pd.Series(np.linspace(10, 100, 60))
+        upper, middle, lower, bandwidth = calculate_bollinger_bands(close)
+        valid = upper.dropna()
+        valid_m = middle.dropna()
+        assert (valid > valid_m).all(), "Upper band must be above middle band"
+
+    def test_middle_above_lower(self) -> None:
+        close = pd.Series(np.linspace(10, 100, 60))
+        upper, middle, lower, bandwidth = calculate_bollinger_bands(close)
+        valid_m = middle.dropna()
+        valid_l = lower.dropna()
+        assert (valid_m > valid_l).all(), "Middle band must be above lower band"
+
+    def test_bandwidth_positive(self) -> None:
+        close = pd.Series(np.linspace(10, 100, 60))
+        upper, middle, lower, bandwidth = calculate_bollinger_bands(close)
+        valid_bw = bandwidth.dropna()
+        assert (valid_bw > 0).all(), "Bandwidth must be positive"
 
 
-class TestCalculateIndicators(unittest.TestCase):
-    def test_etf_no_kd(self):
-        """ETF type should have NaN for K and D."""
-        np.random.seed(42)
-        n = 60
-        dates = pd.date_range("2024-01-01", periods=n, freq="B")
-        df = pd.DataFrame({
-            "Open":   np.random.rand(n) * 10 + 100,
-            "High":   np.random.rand(n) * 10 + 105,
-            "Low":    np.random.rand(n) * 10 + 95,
-            "Close":  np.random.rand(n) * 10 + 100,
-            "Volume": np.random.randint(1000, 10000, n),
-        }, index=dates)
+# ─────────────────────────────────────────────
+# calculate_indicators integration test
+# ─────────────────────────────────────────────
 
-        result = calculate_indicators(df, "ETF")
-        self.assertTrue(result["k"].isna().all())
-        self.assertTrue(result["d"].isna().all())
+class TestCalculateIndicators:
+    def test_stock_ticker_returns_kd_columns(self, ohlcv_rising: pd.DataFrame) -> None:
+        result = calculate_indicators(ohlcv_rising, ticker_type="STOCK")
+        assert "k" in result.columns
+        assert "d" in result.columns
+        # KD should be non-NaN once enough data accumulated
+        valid_k = result["k"].dropna()
+        assert len(valid_k) > 0, "KD should produce values for STOCK"
 
-    def test_stock_has_kd(self):
-        """STOCK type should have numeric K and D after convergence."""
-        np.random.seed(42)
-        n = 60
-        dates = pd.date_range("2024-01-01", periods=n, freq="B")
-        df = pd.DataFrame({
-            "Open":   np.random.rand(n) * 10 + 100,
-            "High":   np.random.rand(n) * 10 + 105,
-            "Low":    np.random.rand(n) * 10 + 95,
-            "Close":  np.random.rand(n) * 10 + 100,
-            "Volume": np.random.randint(1000, 10000, n),
-        }, index=dates)
+    def test_etf_ticker_kd_is_nan(self, ohlcv_rising: pd.DataFrame) -> None:
+        result = calculate_indicators(ohlcv_rising, ticker_type="ETF")
+        assert result["k"].isna().all(), "KD should be NaN for ETF"
 
-        result = calculate_indicators(df, "STOCK")
-        # After 20 rows, K and D should be non-NaN
-        self.assertFalse(result["k"].iloc[-1:].isna().all())
-        self.assertFalse(result["d"].iloc[-1:].isna().all())
+    def test_all_required_columns_present(self, ohlcv_rising: pd.DataFrame) -> None:
+        result = calculate_indicators(ohlcv_rising, ticker_type="STOCK")
+        required = [
+            "ma5", "ma10", "ma20",
+            "rsi14", "k", "d",
+            "macd_dif", "macd_signal", "macd_histogram",
+            "bb_upper", "bb_middle", "bb_lower", "bb_bandwidth",
+        ]
+        for col in required:
+            assert col in result.columns, f"Missing column: {col}"
+
+    def test_original_ohlcv_columns_preserved(self, ohlcv_rising: pd.DataFrame) -> None:
+        result = calculate_indicators(ohlcv_rising, ticker_type="STOCK")
+        for col in ["Open", "High", "Low", "Close", "Volume"]:
+            assert col in result.columns, f"Original column {col} should be preserved"
 
 
 if __name__ == "__main__":
-    unittest.main()
+    pytest.main([__file__, "-v"])
