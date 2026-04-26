@@ -59,6 +59,8 @@ def _get_risk_params(ticker: str) -> tuple[float, float]:
     """
     if "00919" in ticker:
         return HIGH_DIV_STOP_LOSS_PCT, HIGH_DIV_TAKE_PROFIT_PCT
+    if ticker == "2890.TW":
+        return 8.0, DEFAULT_TAKE_PROFIT_PCT
     return DEFAULT_STOP_LOSS_PCT, DEFAULT_TAKE_PROFIT_PCT
 
 
