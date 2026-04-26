@@ -17,7 +17,7 @@ Reference: SPEC.md v2.0 Sections 3, 4, 8.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 import pandas as pd
 
@@ -120,7 +120,7 @@ def _bb_bullish_filter(bb_upper: float, bb_middle: float, bb_lower: float,
 # Main signal generator
 # ─────────────────────────────────────────────
 
-def generate_signal(ticker: str, df: pd.DataFrame) -> dict:
+def generate_signal(ticker: str, df: pd.DataFrame) -> dict[str, Any]:
     """
     Generate a standardized signal JSON for the latest bar in `df`.
 

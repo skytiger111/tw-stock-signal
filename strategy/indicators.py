@@ -23,7 +23,7 @@ import numpy as np
 # RSI
 # ─────────────────────────────────────────────
 
-def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
+def calculate_rsi(series: pd.Series[float], period: int = 14) -> pd.Series[float]:
     """
     Calculate Wilder's RSI.
 
@@ -53,13 +53,13 @@ def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
 # ─────────────────────────────────────────────
 
 def calculate_kd(
-    high: pd.Series,
-    low: pd.Series,
-    close: pd.Series,
+    high: pd.Series[float],
+    low: pd.Series[float],
+    close: pd.Series[float],
     k_period: int = 9,
     d_period: int = 3,
     smooth_k: int = 3,
-) -> Tuple[pd.Series, pd.Series]:
+) -> Tuple[pd.Series[float], pd.Series[float]]:
     """
     Calculate Slow Stochastic %K and %D.
 
@@ -75,7 +75,7 @@ def calculate_kd(
     lowest_low = low.rolling(window=k_period, min_periods=k_period).min()
     highest_high = high.rolling(window=k_period, min_periods=k_period).max()
 
-    raw_k = 100 * (close - lowest_low) / (highest_high - lowest_low)
+    raw_k = 100.0 * (close - lowest_low) / (highest_high - lowest_low)
     # Fast %K → Slow %K (smoothing)
     k = raw_k.rolling(window=smooth_k, min_periods=smooth_k).mean()
     d = k.rolling(window=d_period, min_periods=d_period).mean()
@@ -88,11 +88,11 @@ def calculate_kd(
 # ─────────────────────────────────────────────
 
 def calculate_macd(
-    series: pd.Series,
+    series: pd.Series[float],
     fast: int = 12,
     slow: int = 26,
     signal_period: int = 9,
-) -> Tuple[pd.Series, pd.Series, pd.Series]:
+) -> Tuple[pd.Series[float], pd.Series[float], pd.Series[float]]:
     """
     Calculate MACD (Moving Average Convergence Divergence).
 
@@ -121,10 +121,11 @@ def calculate_macd(
 # ─────────────────────────────────────────────
 
 def calculate_bollinger_bands(
-    series: pd.Series,
+    series: pd.Series[float],
     period: int = 20,
     num_std: float = 2.0,
-) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+) -> Tuple[pd.Series[float], pd.Series[float], pd.Series[float], pd.Series[float]]:
+
     """
     Calculate Bollinger Bands.
 
@@ -138,7 +139,7 @@ def calculate_bollinger_bands(
         Bandwidth = (Upper - Lower) / Middle * 100 (%).
     """
     middle = series.rolling(window=period, min_periods=period).mean()
-    std = series.rolling(window=period, min_periods=period).std()
+    std: pd.Series[float] = series.rolling(window=period, min_periods=period).std()
 
     upper = middle + num_std * std
     lower = middle - num_std * std
