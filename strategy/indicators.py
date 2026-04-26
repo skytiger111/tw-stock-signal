@@ -183,6 +183,9 @@ def calculate_indicators(df: pd.DataFrame, ticker_type: str) -> pd.DataFrame:
     # RSI(14)
     rsi14 = calculate_rsi(close, period=14)
 
+    # RSI(5) for HIGH_DIV_ETF mean-reversion strategy
+    rsi5 = calculate_rsi(close, period=5)
+
     # KD — only for STOCK
     if ticker_type == "STOCK":
         k, d = calculate_kd(high, low, close)
@@ -202,6 +205,7 @@ def calculate_indicators(df: pd.DataFrame, ticker_type: str) -> pd.DataFrame:
     result["ma10"] = ma10
     result["ma20"] = ma20
     result["rsi14"] = rsi14
+    result["rsi5"] = rsi5
     result["k"] = k
     result["d"] = d
     result["macd_dif"] = macd_dif
